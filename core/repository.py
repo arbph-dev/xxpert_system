@@ -490,3 +490,10 @@ class Repository:
         """Ferme la connexion"""
         self.conn.commit()
         self.conn.close()
+
+
+#--------------------------------------
+DB_FILE = "data/XXpert.db"
+
+class KnowledgeBase:
+    pass

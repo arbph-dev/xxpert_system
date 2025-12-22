@@ -10,6 +10,7 @@ from core.models.question import Question
 class AppController:
     def __init__(self, kb: KnowledgeBase, ui: BaseUI):
         self.kb = kb
+        self.class_service = ClassService(self.kb)
         self.ui = ui
         self.um = UserManager(kb)
         self.wm = None
@@ -30,12 +31,14 @@ class AppController:
             self.ui.show_menu(choices, role)  # Display the menu grid
 
             choice = self.ui.prompt_choice("[bold cyan]Votre choix[/bold cyan]", choices, default="1")
+
             if choice == "3":
-                # Ex. name_q = Question("input", "class_name", "[cyan]Nom de la classe[/cyan]")
-                # answer = self.ui.ask_question(name_q)
-                # success, event = self.wm.add_class(answer.value, parent)
-                # self.ui.handle_event(event)
-                pass  # Placeholder pour éviter l'erreur d'indentation (remplace par le code réel plus tard)
-            # Migre tous elif: Replace console/Prompt by questions/answers/events
+                name_q = Question("input", "class_name", "[cyan]Nom de la classe[/cyan]")
+                answer = self.ui.ask_question(name_q)
+
+                # self.class_service.add_class(...) ; ui.handle_event(event)
+                success, event = self.wm.add_class(answer.value, parent)
+                self.ui.handle_event(event)
+
             elif choice == "0":
                 break
