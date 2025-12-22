@@ -23,8 +23,9 @@ class WorkingMemory:
         event = Event("class_added", "workingMemory", entity=name)
         # return True
         #self.kb.self.store_event(event)
+        self.kb.store_event(event)
         return True, event  # return True, Event("class_added", "database", entity=name)  # Return tuple (success, event)
-        self.kb.self.store_event(event)
+
 
 
     def add_instance(self, name, class_name):
