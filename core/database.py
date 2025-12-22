@@ -167,7 +167,8 @@ class KnowledgeBase:
         self.cursor.execute("INSERT INTO seclass (name, parent_id) VALUES (?, ?)", (name, parent_id))
         self.commit()
         console.print(Panel(f"Classe [green]'{name}'[/] créée", style="green"))
-        return True
+
+        return True, Event("class_added", "database", entity=name)  # Return tuple (success, event)
 
     # --- Propriétés ---
     def add_property(self, name, ptype="string"):
@@ -240,7 +241,7 @@ class KnowledgeBase:
         return [r[0] for r in self.cursor.fetchall()]
 
     # --- Valeurs ---
-    
+
     def get_instance_value(self, inst_name, class_name, prop_name):
         c_id = self.get_class_id(class_name)
         
