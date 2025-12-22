@@ -1,5 +1,4 @@
 # core/inference.py
-# core/inference.py
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
