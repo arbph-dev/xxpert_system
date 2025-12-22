@@ -25,7 +25,10 @@ class AppController:
             choices = ["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"]
             if role == 'admin':
                 choices += ["20", "21"]
-            # Menu: ui.show_menu(choices) - but since show_menu not yet impl, direct prompt
+            
+            
+            self.ui.show_menu(choices, role)  # Display the menu grid
+
             choice = self.ui.prompt_choice("[bold cyan]Votre choix[/bold cyan]", choices, default="1")
             if choice == "3":
                 # Ex. name_q = Question("input", "class_name", "[cyan]Nom de la classe[/cyan]")

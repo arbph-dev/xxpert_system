@@ -26,4 +26,20 @@ class BaseUI(ABC):
     def select_list(self, items, title):
         pass
 
-    # Add show_tree, etc.
+    @abstractmethod
+    def show_menu(self, choices, role):
+        """Display the main menu grid based on choices and role."""
+        pass
+
+    @abstractmethod
+    def prompt_choice(self, prompt, choices, default=None):
+        pass
+
+    @abstractmethod
+    def confirm(self, prompt, default=True):
+        pass
+
+    # Add show_tree if not already
+    @abstractmethod
+    def show_tree(self, kb):
+        pass
