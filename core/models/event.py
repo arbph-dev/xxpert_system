@@ -7,6 +7,17 @@
     Severity
     Event
 
+| Champ        | Description                                          |
+| ------------ | ---------------------------------------------------- |
+| `event_type` | Type sémantique (ex: `value_deduced`, `job_created`) |
+| `source`     | Module émetteur (`inference`, `workflow`, `stats`)   |
+| `entity`     | Classe / Instance / Job concerné                     |
+| `payload`    | Données métier (valeur, règle, seuil, etc.)          |
+| `severity`   | info / warning / error                               |
+| `timestamp`  | Horodatage                                           |
+
+
+
 """
 from datetime import datetime
 
