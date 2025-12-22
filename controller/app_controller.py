@@ -1,11 +1,14 @@
 # controller/app_controller.py (updated with proper prompt_choice call)
 
 from core.database import KnowledgeBase
+#from core.repository import Repository
 from core.workflow.working_memory import WorkingMemory
 from core.auth.user import UserManager
 from ui.base_ui import BaseUI
+from ui.console_ui import ConsoleUI
 from core.models.event import Event
 from core.models.question import Question
+from core.services.class_service import ClassService
 
 class AppController:
     def __init__(self, kb: KnowledgeBase, ui: BaseUI):
@@ -14,6 +17,7 @@ class AppController:
         self.ui = ui
         self.um = UserManager(kb)
         self.wm = None
+
 
     def run(self):
         # Login: Use questions if needed, mais pour l'instant as before
@@ -35,6 +39,8 @@ class AppController:
             if choice == "3":
                 name_q = Question("input", "class_name", "[cyan]Nom de la classe[/cyan]")
                 answer = self.ui.ask_question(name_q)
+                console = ConsoleUI()
+                parent = console.select_list(self.kb.get_all_class_names(), "Classe parente (facultatif)", wm = self.wm)
 
                 # self.class_service.add_class(...) ; ui.handle_event(event)
                 success, event = self.wm.add_class(answer.value, parent)

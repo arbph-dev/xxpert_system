@@ -493,7 +493,7 @@ class Repository:
 
 
 #--------------------------------------
-DB_FILE = "data/XXpert.db"
+#DB_FILE = "data/XXpert.db"
 
-class KnowledgeBase:
-    pass
+#class KnowledgeBase:
+    

@@ -5,6 +5,23 @@
     
 # classes
     Question
+
+
+| Champ           | Description                          |
+| --------------- | ------------------------------------ |
+| `question_id`   | Identifiant unique                   |
+| `question_type` | valeur / choix / validation          |
+| `target`        | Propriété / Classe / Instance        |
+| `prompt`        | Texte explicatif                     |
+| `expected_type` | bool / number / enum / text          |
+| `unit`          | Unité SI si applicable               |
+| `choices`       | Liste possible (si enum)             |
+| `default`       | Valeur par défaut                    |
+| `mandatory`     | bool                                 |
+| `context`       | Contexte métier (job, règle, source) |
+
+
+
 """
 
 import uuid

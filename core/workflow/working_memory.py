@@ -2,6 +2,7 @@
 import json
 from rich.console import Console
 from rich.panel import Panel
+from core.models.event import Event
 
 console = Console()
 
@@ -19,7 +20,12 @@ class WorkingMemory:
         console.print(f"[yellow]WM: Simulation ajout classe '{name}'[/]")
         self.add_change('add_class', {'name': name, 'parent': parent})
         self.temporary.setdefault('classes', []).append(name)
-        return True
+        event = Event("class_added", "workingMemory", entity=name)
+        # return True
+        #self.kb.self.store_event(event)
+        return True, event  # return True, Event("class_added", "database", entity=name)  # Return tuple (success, event)
+        self.kb.self.store_event(event)
+
 
     def add_instance(self, name, class_name):
         console.print(f"[yellow]WM: Simulation ajout instance '{name}' dans '{class_name}'[/]")

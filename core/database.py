@@ -4,7 +4,7 @@ import sqlite3
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
-
+from core.models.event import Event
 from core.inference import ForwardEngine, BackwardEngine
 from core.services.EntityService import EntityService
 
@@ -22,7 +22,6 @@ class KnowledgeBase:
         self.backward_engine = BackwardEngine(self)
         self._register_default_rules()        
 
-        #
         self.entity_service = EntityService()
 
 
@@ -109,6 +108,15 @@ class KnowledgeBase:
                 FOREIGN KEY (validated_by) REFERENCES se_users(id)
             );
 
+            CREATE TABLE IF NOT EXISTS se_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                source TEXT NOT NULL,
+                entity TEXT,
+                payload TEXT, 
+                severity TEXT DEFAULT 'info',
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
 
         """)
         self.conn.commit()
@@ -167,7 +175,9 @@ class KnowledgeBase:
         self.commit()
         console.print(Panel(f"Classe [green]'{name}'[/] créée", style="green"))
 
-        return True, Event("class_added", "database", entity=name)  # Return tuple (success, event)
+        event = Event("class_added", "database", entity=name)
+        return True, event  # return True, Event("class_added", "database", entity=name)  # Return tuple (success, event)
+        self.store_event(event)
 
     # --- Propriétés ---
     def add_property(self, name, ptype="string"):
@@ -570,3 +580,22 @@ class KnowledgeBase:
         self.cursor.execute("UPDATE se_submissions SET status = 'rejected', validated_by = ?, validated_at = CURRENT_TIMESTAMP WHERE id = ?", (validator_id, submission_id))
         self.commit()
         return True
+
+    # ========== EVENTS ==========
+    def store_event(self, event):
+        payload_json = json.dumps(event.payload) if event.payload else None
+        self.cursor.execute("""
+            INSERT INTO se_events (event_type, source, entity, payload, severity)
+            VALUES (?, ?, ?, ?, ?)
+        """, (event.event_type, event.source, event.entity, payload_json, event.severity))
+        self.commit()
+
+    def get_events(self, entity=None, limit=50):
+        query = "SELECT * FROM se_events"
+        params = ()
+        if entity:
+            query += " WHERE entity = ?"
+            params = (entity,)
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params += (limit,)
+        return self.cursor.execute(query, params).fetchall()  # Return list tuples, map to Event if needed        
