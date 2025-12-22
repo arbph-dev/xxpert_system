@@ -1,4 +1,5 @@
-# /ui/console_ui.py
+# ui/console_ui.py
+#  updated with select_list and other missing methods
 
 from rich.console import Console
 from rich.panel import Panel
@@ -31,7 +32,6 @@ class ConsoleUI(BaseUI):
     def show_panel(self, text, style="blue"):
         self.console.print(Panel(text, style=style))
 
-    # Migre show_table, select_list, show_tree from console.py
     def show_table(self, title, columns, rows):
         table = Table(title=title)
         for col in columns:
@@ -40,4 +40,54 @@ class ConsoleUI(BaseUI):
             table.add_row(*row)
         self.console.print(table)
 
-    # ... (select_list with jaune for temp WM)
+    def select_list(self, items, title, wm=None, temp_items=None, official_color="green", temp_color="yellow"):
+        if wm:
+            items = wm.get_temp_classes() if temp_items is None else temp_items
+
+        if not items:
+            self.console.print(Panel("Liste vide", style="yellow"))
+            return None
+
+        table = Table(title=title)
+        table.add_column("N°", style="cyan")
+        table.add_column("Item", style="green")
+
+        for i, item in enumerate(items, 1):
+            # Différencier couleur si temp
+            color = temp_color if wm and item in wm.changes else official_color
+            table.add_row(str(i), f"[{color}]{item}[/]")
+
+        self.console.print(table)
+        while True:
+            ch = Prompt.ask("Numéro (0 annuler)", default="0")
+            if ch == "0":
+                return None
+            if ch.isdigit() and 1 <= int(ch) <= len(items):
+                return items[int(ch)-1]
+            self.console.print("[red]Invalide[/]")
+
+    def show_tree(self, kb):
+        data = kb.get_hierarchy()
+        if not data:
+            self.console.print(Panel("Aucune classe", style="yellow"))
+            return
+        tree = Tree("[bold blue]=== CLASSES ===[/]")
+        nodes = {}
+        for cid, name, pid, level in data:
+            props = len(kb.get_all_props_for_class(name))
+            insts = len(kb.get_all_instances(name))
+            label = f"[green]{name}[/] — {props} props — {insts} inst."
+            if pid is None:
+                node = tree.add(label)
+            else:
+                parent_node = nodes[pid]
+                node = parent_node.add(label)
+            nodes[cid] = node
+        self.console.print(tree)
+
+    def prompt_choice(self, prompt, choices, default=None):
+        return Prompt.ask(prompt, choices=choices, default=default)
+
+    # Add other missing abstracts if needed (ex. confirm, etc.)
+    def confirm(self, prompt, default=True):
+        return Confirm.ask(prompt, default=default)

@@ -6,9 +6,8 @@ from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
 
 from core.inference import ForwardEngine, BackwardEngine
+from core.services.EntityService import EntityService
 
-# 
-from core.services import EntityService
 
 console = Console()
 DB_FILE = "data/XXpert.db"
