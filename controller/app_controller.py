@@ -18,7 +18,7 @@ class AppController:
         # Login: Use questions if needed, mais pour l'instant as before
         user_id, username, role = self.um.login()  # Update um pour use questions/ui
         self.wm = WorkingMemory(self.kb)
-        self.ui.handle_event(Event("app_start", "controller"))
+        self.ui.handle_event(Event("app_start", "AppController"))
 
         while True:
             # Define choices
