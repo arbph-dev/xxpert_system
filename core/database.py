@@ -7,7 +7,7 @@ from rich.panel import Panel
 from core.models.event import Event
 from core.inference import ForwardEngine, BackwardEngine
 from core.services.EntityService import EntityService
-
+import json
 
 console = Console()
 DB_FILE = "data/XXpert.db"

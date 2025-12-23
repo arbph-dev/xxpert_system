@@ -12,23 +12,23 @@ class UserManager:
         answer = ui.ask_question(username_q)
         username = answer.value.lower().strip()
         if not username:
-            ui.handle_event(Event("error", "login", payload="Username required", severity=Severity.ERROR))
+            ui.handle_event(Event("error", "login", payload="[red]Username requis[/red]", severity=Severity.ERROR))
             return self.login(ui)  # Retry
 
         role = self.repo.get_user_role(username)
         if role:
-            event = Event("login_success", "user_manager", payload={"username": username.capitalize(), "role": role})
+            event = Event("login_success", "user_manager", payload=f"[green]Bienvenue, {username.capitalize()} ({role})[/]")
             ui.handle_event(event)
             user_id = self.repo.get_user_id(username)
             return user_id, username.capitalize(), role
 
-        confirm_q = Question("confirmation", "create_user", f"User '{username}' unknown. Create?")
+        confirm_q = Question("confirmation", "create_user", f"[yellow]Utilisateur '{username}' inconnu. Créer ?[/yellow]", expected_type="bool", default=True)
         confirm_answer = ui.ask_question(confirm_q)
         if confirm_answer.value:
             self.wm.add_change('create_user', {'username': username, 'role': 'user'})  # Stage in WM
-            event = Event("user_created", "user_manager", payload={"username": username.capitalize()})
+            event = Event("user_created", "user_manager", payload=f"[green]Utilisateur '{username.capitalize()}' créé (rôle user)[/]")
             ui.handle_event(event)
             # Submit WM later for admin validation
             user_id = self.repo.get_user_id(username)  # Temp until validated
             return user_id, username.capitalize(), 'user'
-        return self.login(ui)  # Retry
+        #return self.login(ui)  # Retry
