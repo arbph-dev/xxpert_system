@@ -598,4 +598,12 @@ class KnowledgeBase:
             params = (entity,)
         query += " ORDER BY timestamp DESC LIMIT ?"
         params += (limit,)
-        return self.cursor.execute(query, params).fetchall()  # Return list tuples, map to Event if needed        
+        return self.cursor.execute(query, params).fetchall()  # Return list tuples, map to Event if needed
+
+    # core/database.py (repo, no UI/logic; pure data access)
+    # ... (existing, remove any print/Prompt; return data or success)
+    def class_exists(self, name):
+        return bool(self.get_class_id(name))
+    # No store_event here; services handle
+
+           

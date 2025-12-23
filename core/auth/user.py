@@ -1,29 +1,34 @@
-from rich.console import Console
-from rich.prompt import Prompt, Confirm  # Confirm ajouté
-
-console = Console()
+# core/auth/user.py (decoupled from Rich, use Questions/Events)
+from core.models.question import Question
+from core.models.event import Event
 
 class UserManager:
-    def __init__(self, kb):
-        self.kb = kb
+    def __init__(self, repo, wm):
+        self.repo = repo  # KB as repo
+        self.wm = wm
 
-    def login(self):
-        while True:
-            username = Prompt.ask("[bold cyan]Username[/bold cyan]").strip().lower()
-            if not username:
-                console.print("[red]Username requis[/red]")
-                continue
+    def login(self, ui):
+        username_q = Question("input", "username", "Username")
+        answer = ui.ask_question(username_q)
+        username = answer.value.lower().strip()
+        if not username:
+            ui.handle_event(Event("error", "login", payload="Username required", severity=Severity.ERROR))
+            return self.login(ui)  # Retry
 
-            role = self.kb.get_user_role(username)
-            #console.print(f"[green]lecture, {username.capitalize()} ({role})[/]")
+        role = self.repo.get_user_role(username)
+        if role:
+            event = Event("login_success", "user_manager", payload={"username": username.capitalize(), "role": role})
+            ui.handle_event(event)
+            user_id = self.repo.get_user_id(username)
+            return user_id, username.capitalize(), role
 
-            if role:
-                console.print(f"[green]Bienvenue, {username.capitalize()} ({role})[/]")
-                user_id = self.kb.get_user_id(username)
-                return user_id, username.capitalize(), role
-
-            if Confirm.ask(f"[yellow]Utilisateur '{username}' inconnu. Créer ?[/yellow]"):
-                self.kb.create_user(username, 'user')
-                console.print(f"[green]Utilisateur '{username.capitalize()}' créé (rôle user)[/]")
-                user_id = kb.get_user_id(username)
-                return user_id, username.capitalize(), 'user'
+        confirm_q = Question("confirmation", "create_user", f"User '{username}' unknown. Create?")
+        confirm_answer = ui.ask_question(confirm_q)
+        if confirm_answer.value:
+            self.wm.add_change('create_user', {'username': username, 'role': 'user'})  # Stage in WM
+            event = Event("user_created", "user_manager", payload={"username": username.capitalize()})
+            ui.handle_event(event)
+            # Submit WM later for admin validation
+            user_id = self.repo.get_user_id(username)  # Temp until validated
+            return user_id, username.capitalize(), 'user'
+        return self.login(ui)  # Retry

@@ -9,20 +9,27 @@ from ui.console_ui import ConsoleUI
 from core.models.event import Event
 from core.models.question import Question
 from core.services.class_service import ClassService
+from core.models.command import Command
+
+
 
 class AppController:
     def __init__(self, kb: KnowledgeBase, ui: BaseUI):
         self.kb = kb
-        self.class_service = ClassService(self.kb)
         self.ui = ui
-        self.um = UserManager(kb)
-        self.wm = None
+        #self.wm = None
+        self.wm = WorkingMemory(self.kb)
+        self.um = UserManager(self.kb, self.wm)
+        self.class_service = ClassService(self.kb, self.wm)
+        
+        #user_id, username, role = self.um.login(self.ui)  # Pass UI
+
 
 
     def run(self):
         # Login: Use questions if needed, mais pour l'instant as before
-        user_id, username, role = self.um.login()  # Update um pour use questions/ui
-        self.wm = WorkingMemory(self.kb)
+        user_id, username, role = self.um.login(self.ui)  # Update um pour use questions/ui
+        
         self.ui.handle_event(Event("app_start", "AppController"))
 
         while True:
@@ -37,13 +44,13 @@ class AppController:
             choice = self.ui.prompt_choice("[bold cyan]Votre choix[/bold cyan]", choices, default="1")
 
             if choice == "3":
-                name_q = Question("input", "class_name", "[cyan]Nom de la classe[/cyan]")
+                # In run, for choice == "3":
+                name_q = Question("input", "class_name", "Nom de la classe")
                 answer = self.ui.ask_question(name_q)
-                console = ConsoleUI()
-                parent = console.select_list(self.kb.get_all_class_names(), "Classe parente (facultatif)", wm = self.wm)
-
-                # self.class_service.add_class(...) ; ui.handle_event(event)
-                success, event = self.wm.add_class(answer.value, parent)
+                parent_q = Question("choice", "parent", "Parent (optional)", choices=self.kb.get_all_class_names())
+                parent_answer = self.ui.ask_question(parent_q)
+                cmd = Command("add_class", parameters={"name": answer.value, "parent": parent_answer.value}, actor=user_id)
+                event = self.class_service.handle_command(cmd)
                 self.ui.handle_event(event)
 
             elif choice == "0":

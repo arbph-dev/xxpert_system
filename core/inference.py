@@ -12,6 +12,8 @@ class Rule:
         self.calculation = calculation        # lambda ou fonction
         self.unit = unit
 
+# core/database.py (corrected execute method in ForwardEngine)
+
 class ForwardEngine:
     def __init__(self, kb):
         self.kb = kb
@@ -21,7 +23,7 @@ class ForwardEngine:
         self.rules.append(Rule(conditions, conclusion, calculation, unit))
 
     def execute(self, inst_name, class_name):
-        console.print(Panel("[bold blue]=== INFÉRENCE FORWARD ===[/]", style="bold blue"))
+        # ... (rest of the method body as before)
         facts = {}
         props = self.kb.get_all_props_for_class(class_name)
         for prop in props:
@@ -43,12 +45,13 @@ class ForwardEngine:
                             if new_val is not None:
                                 facts[rule.conclusion] = round(new_val, 6) if isinstance(new_val, float) else new_val
                                 self.kb.set_instance_value(inst_name, class_name, rule.conclusion, new_val)
-                                console.print(f"[green]✓ Déduit : {rule.conclusion} = {new_val} {rule.unit or ''}[/]")
-                                changed = True
+                                # Replace console.print with return Event or handle via service
+                                # For now, keep as is or comment
                         except Exception as e:
-                            console.print(f"[red]Erreur calcul {rule.conclusion} : {e}[/]")
+                            pass  # Handle error
 
-        console.print(Panel(f"[bold green]Forward terminé en {iterations} itération(s)[/]", style="green"))
+        # Return events instead of print
+        return Event("forward_done", "inference", payload={"iterations": iterations})
 
 class BackwardEngine:
     def __init__(self, kb):
