@@ -19,49 +19,23 @@ class AppController:
         self.ui = ui
         #self.wm = None
         self.wm = WorkingMemory(self.kb)
-        self.um = UserManager(self.kb, self.wm)
+        
+        self.um = UserManager(self.kb) # self.um = UserManager(self.kb, self.wm)
+
         self.class_service = ClassService(self.kb, self.wm)
         
         #user_id, username, role = self.um.login(self.ui)  # Pass UI
 
 
-
-    def runOLD(self):
-        # Login: Use questions if needed, mais pour l'instant as before
-        user_id, username, role = self.um.login(self.ui)  # Update um pour use questions/ui
-        
-        self.ui.handle_event(Event("app_start", "AppController"))
-
-        while True:
-            # Define choices
-            choices = ["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"]
-            if role == 'admin':
-                choices += ["20", "21"]
-            
-            
-            self.ui.show_menu(choices, role)  # Display the menu grid
-
-            choice = self.ui.prompt_choice("[bold cyan]Votre choix[/bold cyan]", choices, default="1")
-
-            if choice == "3":
-                # In run, for choice == "3":
-                name_q = Question("input", "class_name", "Nom de la classe")
-                answer = self.ui.ask_question(name_q)
-                parent_q = Question("choice", "parent", "Parent (optional)", choices=self.kb.get_all_class_names())
-                parent_answer = self.ui.ask_question(parent_q)
-                cmd = Command("add_class", parameters={"name": answer.value, "parent": parent_answer.value}, actor=user_id)
-                event = self.class_service.handle_command(cmd)
-                self.kb.store_event(event) #stocke en db
-                self.ui.handle_event(event)
-
-            elif choice == "0":
-                break
-
-    def run(self):
+    def init_logic(self):
         user_id, username, role = self.um.login(self.ui)
+        self.user_id = user_id  # Store for commands
+        self.role = role
+        self.wm = WorkingMemory(self.kb)
         choices = ["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"]
         if role == 'admin':
             choices += ["20", "21"]
+        self.ui.handle_event(Event("app_start", "controller"))
         self.ui.handle_event(Event("menu_requested", "controller", payload={"choices": choices, "role": role}))
 
     def handle_choice(self, choice):
@@ -70,9 +44,11 @@ class AppController:
             answer = self.ui.ask_question(name_q)
             parent_q = Question("choice", "parent", "Parent (optional)", choices=self.kb.get_all_class_names())
             parent_answer = self.ui.ask_question(parent_q)
-            cmd = Command("add_class", parameters={"name": answer.value, "parent": parent_answer.value}, actor=self.user_id)  # Assume self.user_id set
+            cmd = Command("add_class", parameters={"name": answer.value, "parent": parent_answer.value}, actor=self.user_id)
             event = self.class_service.handle_command(cmd)
             self.ui.handle_event(event)
-        # Add other choices similarly
         elif choice == "0":
             QApplication.quit()
+        # Add other choices
+
+    # No run() with while; all async via events/choices

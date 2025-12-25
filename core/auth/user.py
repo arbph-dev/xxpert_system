@@ -1,34 +1,30 @@
-# core/auth/user.py (decoupled from Rich, use Questions/Events)
+# core/auth/user.py (decoupled without major changes: inject ui only for login, keep structure)
 from core.models.question import Question
-from core.models.event import Event
+from core.models.event import Event, Severity
 
 class UserManager:
-    def __init__(self, repo, wm):
-        self.repo = repo  # KB as repo
-        self.wm = wm
+    def __init__(self, kb):
+        self.kb = kb
 
     def login(self, ui):
-        username_q = Question("input", "username", "Username")
-        answer = ui.ask_question(username_q)
-        username = answer.value.lower().strip()
-        if not username:
-            ui.handle_event(Event("error", "login", payload="[red]Username requis[/red]", severity=Severity.ERROR))
-            return self.login(ui)  # Retry
+        while True:
+            username_q = Question("input", "username", "[bold cyan]Username[/bold cyan]")
+            answer = ui.ask_question(username_q)
+            username = answer.value.strip().lower()
+            if not username:
+                ui.handle_event(Event("error", "login", payload="[red]Username requis[/red]", severity=Severity.ERROR))
+                continue
 
-        role = self.repo.get_user_role(username)
-        if role:
-            event = Event("login_success", "user_manager", payload=f"[green]Bienvenue, {username.capitalize()} ({role})[/]")
-            ui.handle_event(event)
-            user_id = self.repo.get_user_id(username)
-            return user_id, username.capitalize(), role
+            role = self.kb.get_user_role(username)
+            if role:
+                ui.handle_event(Event("login_success", "user_manager", payload=f"[green]Bienvenue, {username.capitalize()} ({role})[/]"))
+                user_id = self.kb.get_user_id(username)
+                return user_id, username.capitalize(), role
 
-        confirm_q = Question("confirmation", "create_user", f"[yellow]Utilisateur '{username}' inconnu. Créer ?[/yellow]", expected_type="bool", default=True)
-        confirm_answer = ui.ask_question(confirm_q)
-        if confirm_answer.value:
-            self.wm.add_change('create_user', {'username': username, 'role': 'user'})  # Stage in WM
-            event = Event("user_created", "user_manager", payload=f"[green]Utilisateur '{username.capitalize()}' créé (rôle user)[/]")
-            ui.handle_event(event)
-            # Submit WM later for admin validation
-            user_id = self.repo.get_user_id(username)  # Temp until validated
-            return user_id, username.capitalize(), 'user'
-        #return self.login(ui)  # Retry
+            create_q = Question("confirmation", "create_user", f"[yellow]Utilisateur '{username}' inconnu. Créer ?[/yellow]", expected_type="bool", default=True)
+            create_answer = ui.ask_question(create_q)
+            if create_answer.value:
+                self.kb.create_user(username, 'user')  # Direct for simplicity; WM if staging needed
+                ui.handle_event(Event("user_created", "user_manager", payload=f"[green]Utilisateur '{username.capitalize()}' créé (rôle user)[/]"))
+                user_id = self.kb.get_user_id(username)
+                return user_id, username.capitalize(), 'user'

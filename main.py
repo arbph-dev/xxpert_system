@@ -11,12 +11,11 @@ from controller.app_controller import AppController
 
 def main():
     kb = KnowledgeBase()
-    # ui = ConsoleUI()
     ui = PyQtUI()
-    
     controller = AppController(kb, ui)
-    ui.controller = controller  # Bidirectional for menu callbacks
-    controller.run()
+    ui.controller = controller
+    ui.run()  # Lance la fenêtre et la boucle
+
 
 if __name__ == "__main__":
     main()
