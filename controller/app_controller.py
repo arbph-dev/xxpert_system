@@ -26,7 +26,7 @@ class AppController:
 
 
 
-    def run(self):
+    def runOLD(self):
         # Login: Use questions if needed, mais pour l'instant as before
         user_id, username, role = self.um.login(self.ui)  # Update um pour use questions/ui
         
@@ -56,3 +56,23 @@ class AppController:
 
             elif choice == "0":
                 break
+
+    def run(self):
+        user_id, username, role = self.um.login(self.ui)
+        choices = ["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"]
+        if role == 'admin':
+            choices += ["20", "21"]
+        self.ui.handle_event(Event("menu_requested", "controller", payload={"choices": choices, "role": role}))
+
+    def handle_choice(self, choice):
+        if choice == "3":
+            name_q = Question("input", "class_name", "Nom de la classe")
+            answer = self.ui.ask_question(name_q)
+            parent_q = Question("choice", "parent", "Parent (optional)", choices=self.kb.get_all_class_names())
+            parent_answer = self.ui.ask_question(parent_q)
+            cmd = Command("add_class", parameters={"name": answer.value, "parent": parent_answer.value}, actor=self.user_id)  # Assume self.user_id set
+            event = self.class_service.handle_command(cmd)
+            self.ui.handle_event(event)
+        # Add other choices similarly
+        elif choice == "0":
+            QApplication.quit()
