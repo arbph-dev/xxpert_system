@@ -1,5 +1,5 @@
 # ui/pyqt_ui.py (version fonctionnelle : fenêtre principale active, menu cliquable, questions non-bloquantes)
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QMessageBox, QInputDialog, QTreeWidget, QTableWidget, QMenuBar, QWidget, QVBoxLayout, QLabel, QTabWidget, QStatusBar , QDialog, QFormLayout, QLineEdit, QPushButton)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QMessageBox, QInputDialog, QTreeWidget, QTableWidget, QMenuBar, QWidget, QVBoxLayout, QLabel, QTabWidget, QStatusBar , QDialog, QFormLayout, QLineEdit, QPushButton,QComboBox,QTableWidgetItem)
 from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt
 from .base_ui import BaseUI
@@ -7,7 +7,7 @@ from core.models.event import Event, Severity
 from core.models.question import Question
 from core.models.answer import Answer
 
-
+DEBUG = True  # Ou False pour désactiver
 
 class LoginDialog(QDialog):
     def __init__(self, parent=None, ui=None):
@@ -20,6 +20,7 @@ class LoginDialog(QDialog):
         login_btn = QPushButton("Login")
         login_btn.clicked.connect(self.login)
         layout.addWidget(login_btn)
+
 
     def login(self):
         username = self.username_edit.text().strip().lower()
@@ -34,16 +35,19 @@ class LoginDialog(QDialog):
 class PyQtUI(BaseUI):
     def __init__(self):
         self.app = QApplication([])
+        #self._apply_styles()   # ← ICI, point d’entrée unique du style
+        with open("ui/styles.qss", "r") as f:
+            self.app.setStyleSheet(f.read())
         self.window = QMainWindow()
         self.window.setWindowTitle("XXpert System V0.9 - Dashboard")
-        self.window.resize(800, 600)
+        self.window.resize(1400, 900)
         self.controller = None
 
         # Modal login before show
-        login_dialog = LoginDialog(self.window, self)
-        if login_dialog.exec() == QDialog.DialogCode.Rejected:
-            QApplication.quit()  # Exit if login cancel
-            return  # Stop init
+#        login_dialog = LoginDialog(self.window, self)
+#        if login_dialog.exec() == QDialog.DialogCode.Rejected:
+#            QApplication.quit()  # Exit if login cancel
+#            return  # Stop init
 
         # Proceed after login success
         self.status_bar = QStatusBar()
@@ -56,15 +60,30 @@ class PyQtUI(BaseUI):
         self.home_tab = QWidget()
         home_layout = QVBoxLayout(self.home_tab)
         home_label = QLabel("Bienvenue dans XXpert System\nUtilisez le menu principal pour naviguer")
+        home_label.setProperty("role", "title") # voir ui/styles.qss
+
         home_layout.addWidget(home_label)
         self.dashboard.addTab(self.home_tab, "Accueil")
 
         self.tree_tab = QTreeWidget()
         self.dashboard.addTab(self.tree_tab, "Arbre Classes")
 
-        self.table_tab = QTableWidget()
+        #self.table_tab = QTableWidget()
+        self.table_tab = QWidget()  # Change de QTableWidget à QWidget pour layout
+        table_layout = QVBoxLayout(self.table_tab)
+        self.table_combo = QComboBox()
+        self.table_combo.addItems(["Classes", "Instances", "Props", "Events"])
+        self.table_combo.currentTextChanged.connect(self.load_table)
+        table_layout.addWidget(self.table_combo)
+        self.table_widget = QTableWidget()
+        table_layout.addWidget(self.table_widget)
         self.dashboard.addTab(self.table_tab, "Tables")
+        #if self.table_combo.count() > 0:
+        #    self.load_table(self.table_combo.currentText())
 
+
+
+        
         self.log_tab = QLabel("Log events :\n")
         log_scroll = QWidget()
         log_layout = QVBoxLayout(log_scroll)
@@ -74,6 +93,13 @@ class PyQtUI(BaseUI):
     def handle_event(self, event: Event):
         if event.event_type == "menu_requested":
             self.show_menu(event.payload.get("choices", []), event.payload.get("role", "user"))
+
+        elif event.event_type == "table_requested":
+            table_name = event.payload.get("table_name")
+            if table_name:
+                self.table_combo.setCurrentText(table_name.capitalize())
+                self.load_table(table_name.capitalize())
+                self.dashboard.setCurrentWidget(self.table_tab)
         else:
             self.status_bar.showMessage(f"{event.event_type}: {event.payload}", 5000)
             current_log = self.log_tab.text()
@@ -82,7 +108,8 @@ class PyQtUI(BaseUI):
         if event.severity == Severity.ERROR:
             QMessageBox.critical(self.window, "Erreur", str(event.payload))
     
-    
+
+
     def ask_question(self, question: Question) -> Answer:
         # Questions en dialogs (modaux OK ici, car courts)
         if question.expected_type == "bool":
@@ -123,15 +150,48 @@ class PyQtUI(BaseUI):
         display_items = [f"[temp] {i}" if wm and i in wm.changes else i for i in items]
         val, ok = QInputDialog.getItem(self.window, title, title, display_items, 0, False)
         return val.replace("[temp] ", "") if ok else None
+    
+    # DEV
+    def load_table(self, table_name):
+        if DEBUG:
+           print(f"load_table called with {table_name}")
+           print(f"Controller: {self.controller}, KB: {self.controller.kb if self.controller else None}")        
+  
+        if not self.controller or not self.controller.kb:
+            if DEBUG:
+                print("load_table: Controller or KB None, returning early")            
+            return
+        kb = self.controller.kb
+        columns = []
+        rows = []
+        if table_name == "Classes":
+            columns = ["ID", "Name", "Parent ID"]
+            if DEBUG:
+                print("Fetching classes...")            
+            rows = kb.get_all_classes()  
+        elif table_name == "Instances":
+            columns = ["ID", "Name", "Class Name"]
+            rows = kb.get_all_instances_global()  
+        elif table_name == "Props":  # Ou "Properties"
+            columns = ["ID", "Name", "Type"]
+            rows = kb.get_all_properties()  
+        elif table_name == "Events":
+            columns = ["ID", "Type", "Source", "Entity", "Payload", "Severity", "Timestamp"]
+            rows = kb.get_all_events(limit=100)  
+        self.show_table(f"Table: {table_name}", columns, rows)
+        if DEBUG:
+            print(f"show_table called with {len(rows)} rows")    
 
     # show_table / show_tree : Update tabs
     def show_table(self, title, columns, rows):
-        self.table_tab.setRowCount(len(rows))
-        self.table_tab.setColumnCount(len(columns))
-        self.table_tab.setHorizontalHeaderLabels(columns)
+        if DEBUG:
+            print(f"Entering show_table with title '{title}', {len(columns)} columns, {len(rows)} rows")        
+        self.table_widget.setRowCount(len(rows))
+        self.table_widget.setColumnCount(len(columns))
+        self.table_widget.setHorizontalHeaderLabels(columns)
         for i, row in enumerate(rows):
             for j, val in enumerate(row):
-                self.table_tab.setItem(i, j, QTableWidgetItem(str(val)))
+                self.table_widget.setItem(i, j, QTableWidgetItem(str(val)))
         self.dashboard.setCurrentWidget(self.table_tab)
         self.dashboard.setTabText(self.dashboard.indexOf(self.table_tab), title)
 

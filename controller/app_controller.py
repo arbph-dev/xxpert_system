@@ -47,6 +47,10 @@ class AppController:
             cmd = Command("add_class", parameters={"name": answer.value, "parent": parent_answer.value}, actor=self.user_id)
             event = self.class_service.handle_command(cmd)
             self.ui.handle_event(event)
+        elif choice == "1":  # Assume "1" = Lister classes
+            event = Event("table_requested", "controller", payload={"table_name": "classes"})
+            self.ui.handle_event(event)            
+
         elif choice == "0":
             QApplication.quit()
         # Add other choices

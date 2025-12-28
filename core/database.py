@@ -11,6 +11,7 @@ import json
 
 console = Console()
 DB_FILE = "data/XXpert.db"
+DEBUG = True  # Ou False pour désactiver
 
 class KnowledgeBase:
     def __init__(self):
@@ -157,6 +158,33 @@ class KnowledgeBase:
     def get_all_property_names(self):
         self.cursor.execute("SELECT name FROM seprop ORDER BY name")
         return [r[0] for r in self.cursor.fetchall()]
+    # Ajout DEV 25-12-27
+    def get_all_classes(self):
+        self.cursor.execute("SELECT id, name, parent_id FROM seclass ORDER BY name")
+
+        rows = self.cursor.fetchall()
+        if DEBUG:  # Assume DEBUG global ou passe via self.debug = True
+            print(f"get_all_classes: fetched {len(rows)} rows: {rows}")
+        return rows        
+        #return self.cursor.fetchall()
+
+    # Ajout DEV 25-12-27
+    def get_all_properties(self):
+        self.cursor.execute("SELECT id, name, type FROM seprop ORDER BY name")
+        return self.cursor.fetchall()
+    # Ajout DEV 25-12-27
+    def get_all_instances_global(self):
+        self.cursor.execute("""
+            SELECT i.id, i.name, c.name AS class_name 
+            FROM seinst i JOIN seclass c ON i.class_id = c.id 
+            ORDER BY c.name, i.name
+        """)
+        return self.cursor.fetchall()
+
+    def get_all_events(self, limit=100):
+        # Alias pour get_events sans entity
+        return self.get_events(entity=None, limit=limit)
+
 
     # --- Classes ---
     def add_class(self, name, parent=None):

@@ -14,6 +14,8 @@ def main():
     ui = PyQtUI()
     controller = AppController(kb, ui)
     ui.controller = controller
+    controller.init_logic()  # Appel manquant ? Ajoute si login/menu doit s'init
+    ui.load_table(ui.table_combo.currentText())  # Chargement initial après controller set    
     ui.run()  # Lance la fenêtre et la boucle
 
 
