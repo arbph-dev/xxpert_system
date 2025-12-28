@@ -158,15 +158,27 @@ class KnowledgeBase:
     def get_all_property_names(self):
         self.cursor.execute("SELECT name FROM seprop ORDER BY name")
         return [r[0] for r in self.cursor.fetchall()]
+
     # Ajout DEV 25-12-27
+    # def get_all_classesOLD(self):
+    #     self.cursor.execute("SELECT id, name, parent_id FROM seclass ORDER BY name")
+    #     rows = self.cursor.fetchall()
+    #     if DEBUG:  # Assume DEBUG global ou passe via self.debug = True
+    #         print(f"get_all_classes: fetched {len(rows)} rows: {rows}")
+    #     return rows        
+
     def get_all_classes(self):
-        self.cursor.execute("SELECT id, name, parent_id FROM seclass ORDER BY name")
+        self.cursor.execute("""
+            SELECT c.id, c.name, p.name AS parent_name 
+            FROM seclass c LEFT JOIN seclass p ON c.parent_id = p.id 
+            ORDER BY c.name
+        """)
 
         rows = self.cursor.fetchall()
         if DEBUG:  # Assume DEBUG global ou passe via self.debug = True
             print(f"get_all_classes: fetched {len(rows)} rows: {rows}")
         return rows        
-        #return self.cursor.fetchall()
+
 
     # Ajout DEV 25-12-27
     def get_all_properties(self):
@@ -321,7 +333,7 @@ class KnowledgeBase:
         self.cursor.execute("SELECT type FROM seprop WHERE id=?", (p_id,))
         return self.cursor.fetchone()[0]
 
-    def get_all_props_for_class(self, class_name):
+    def get_all_props_for_classOLD(self, class_name):
         c_id = self.get_class_id(class_name)
         if not c_id:
             return []
@@ -336,8 +348,23 @@ class KnowledgeBase:
             current = row[0] if row else None
         return sorted(props)
 
+
+    def get_all_props_for_class(self, class_name):
+        c_id = self.get_class_id(class_name)
+        if not c_id:
+            return []
+        self.cursor.execute("""
+            SELECT p.name FROM seprop p
+            JOIN seclass_prop cp ON p.id = cp.prop_id
+            WHERE cp.class_id = ?
+            ORDER BY p.name
+        """, (c_id,))
+        return [r[0] for r in self.cursor.fetchall()]
+
+
+
     # --- Pour l'arbre des classes ---
-    def get_hierarchy(self):
+    def get_hierarchyOLD(self):
         self.cursor.execute("""
             WITH RECURSIVE tree(id, name, parent_id, level) AS (
                 SELECT id, name, parent_id, 0 FROM seclass WHERE parent_id IS NULL
@@ -347,6 +374,22 @@ class KnowledgeBase:
             SELECT id, name, parent_id, level FROM tree ORDER BY level, name
         """)
         return self.cursor.fetchall()
+
+    def get_hierarchy(self):
+        self.cursor.execute("""
+            WITH RECURSIVE hierarchy(id, name, parent_id, level) AS (
+                SELECT id, name, parent_id, 0 FROM seclass WHERE parent_id IS NULL
+                UNION ALL
+                SELECT c.id, c.name, c.parent_id, h.level + 1
+                FROM seclass c JOIN hierarchy h ON c.parent_id = h.id
+            )
+            SELECT id, name, parent_id, level FROM hierarchy ORDER BY level, name
+        """)
+        rows = self.cursor.fetchall()
+        if DEBUG:
+            print(f"get_hierarchy: fetched {len(rows)} rows: {rows}")
+        return rows
+
 
     def _update_stats(self, class_id, prop_id, value):
         if value is None or not isinstance(value, (int, float)):

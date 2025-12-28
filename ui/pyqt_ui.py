@@ -1,5 +1,5 @@
 # ui/pyqt_ui.py (version fonctionnelle : fenêtre principale active, menu cliquable, questions non-bloquantes)
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QMessageBox, QInputDialog, QTreeWidget, QTableWidget, QMenuBar, QWidget, QVBoxLayout, QLabel, QTabWidget, QStatusBar , QDialog, QFormLayout, QLineEdit, QPushButton,QComboBox,QTableWidgetItem)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QMessageBox, QInputDialog, QTreeWidget, QTableWidget, QMenuBar, QWidget, QVBoxLayout, QLabel, QTabWidget, QStatusBar , QDialog, QFormLayout, QLineEdit, QPushButton,QComboBox,QTableWidgetItem, QTreeWidgetItem)
 from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt
 from .base_ui import BaseUI
@@ -10,27 +10,60 @@ from core.models.answer import Answer
 DEBUG = True  # Ou False pour désactiver
 
 class LoginDialog(QDialog):
-    def __init__(self, parent=None, ui=None):
+    def __init__(self, kb, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Login")
-        self.ui = ui
+        self.kb = kb
+        self.setWindowTitle("Connexion - XXpert System")
+        self.setModal(True)
+        
         layout = QFormLayout(self)
+        
         self.username_edit = QLineEdit()
+        self.username_edit.setPlaceholderText("Entrez votre nom d'utilisateur")
         layout.addRow("Username:", self.username_edit)
-        login_btn = QPushButton("Login")
-        login_btn.clicked.connect(self.login)
-        layout.addWidget(login_btn)
+        
+        btn_layout = QVBoxLayout()
+        self.login_btn = QPushButton("Se connecter")
+        self.login_btn.clicked.connect(self.attempt_login)
+        btn_layout.addWidget(self.login_btn)
+        
+        self.message_label = QLabel("")
+        self.message_label.setWordWrap(True)
+        layout.addRow(self.message_label)
+        
+        layout.addRow(btn_layout)
+        
+        self.resize(300, 150)
 
-
-    def login(self):
+    def attempt_login(self):
         username = self.username_edit.text().strip().lower()
         if not username:
-            QMessageBox.warning(self, "Error", "Username requis")
+            self.message_label.setText("<font color='red'>Username requis</font>")
             return
-        # Call controller.um.login but since no controller yet, stub or pass to ui
-        # For now, accept and close (real logic in controller)
-        self.accept()  # Close modal on success
-
+        
+        role = self.kb.get_user_role(username)
+        if role:
+            self.username = username.capitalize()
+            self.role = role
+            self.user_id = self.kb.get_user_id(username)
+            self.accept()  # Success → close dialog with Accepted
+            return
+        
+        # User unknown → ask to create
+        reply = QMessageBox.question(
+            self, "Utilisateur inconnu",
+            f"L'utilisateur '{username}' n'existe pas.\nVoulez-vous le créer ?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.kb.create_user(username, 'user')
+            self.username = username.capitalize()
+            self.role = 'user'
+            self.user_id = self.kb.get_user_id(username)
+            self.accept()
+        else:
+            self.message_label.setText("<font color='orange'>Connexion annulée</font>")
+            self.username_edit.clear()
 
 class PyQtUI(BaseUI):
     def __init__(self):
@@ -66,7 +99,10 @@ class PyQtUI(BaseUI):
         self.dashboard.addTab(self.home_tab, "Accueil")
 
         self.tree_tab = QTreeWidget()
+        self.tree_tab.itemClicked.connect(self.handle_tree_click)  # Ajout pour gérer les clics
+        # controller
         self.dashboard.addTab(self.tree_tab, "Arbre Classes")
+
 
         #self.table_tab = QTableWidget()
         self.table_tab = QWidget()  # Change de QTableWidget à QWidget pour layout
@@ -100,6 +136,7 @@ class PyQtUI(BaseUI):
                 self.table_combo.setCurrentText(table_name.capitalize())
                 self.load_table(table_name.capitalize())
                 self.dashboard.setCurrentWidget(self.table_tab)
+   
         else:
             self.status_bar.showMessage(f"{event.event_type}: {event.payload}", 5000)
             current_log = self.log_tab.text()
@@ -108,7 +145,14 @@ class PyQtUI(BaseUI):
         if event.severity == Severity.ERROR:
             QMessageBox.critical(self.window, "Erreur", str(event.payload))
     
-
+    def handle_tree_click(self, item, column):
+        # Extrait le nom de la classe du label (avant " — ")
+        class_name = item.text(column).split(" —")[0]
+        # Affiche dans la status bar
+        self.status_bar.showMessage(f"Classe sélectionnée : {class_name}", 5000)
+        # Optionnel : déclenche un événement pour le controller
+        event = Event("class_selected", "ui", payload={"class_name": class_name})
+        self.controller.ui.handle_event(event)  # Ou directement self.handle_event si local
 
     def ask_question(self, question: Question) -> Answer:
         # Questions en dialogs (modaux OK ici, car courts)
@@ -165,7 +209,7 @@ class PyQtUI(BaseUI):
         columns = []
         rows = []
         if table_name == "Classes":
-            columns = ["ID", "Name", "Parent ID"]
+            columns = ["ID", "Name", "Parent Name"]
             if DEBUG:
                 print("Fetching classes...")            
             rows = kb.get_all_classes()  
@@ -224,5 +268,6 @@ class PyQtUI(BaseUI):
 
 
     def run(self):
-        self.window.show()
-        self.app.exec()  # Boucle principale PyQt
+        #self.window.show()
+        self.app.exec()  # ← Comment or remove (now shown in main())
+        # Boucle principale PyQt

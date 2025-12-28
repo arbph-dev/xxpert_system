@@ -14,10 +14,17 @@ def main():
     ui = PyQtUI()
     controller = AppController(kb, ui)
     ui.controller = controller
-    controller.init_logic()  # Appel manquant ? Ajoute si login/menu doit s'init
-    ui.load_table(ui.table_combo.currentText())  # Chargement initial après controller set    
-    ui.run()  # Lance la fenêtre et la boucle
+    
+    ui.window.show()
 
+    controller.init_logic()  # Appel manquant ? Ajoute si login/menu doit s'init
+    
+    ui.load_table(ui.table_combo.currentText())  # Chargement initial après controller set    
+    
+    ui.show_tree(controller.kb)  # Chargement initial treeview après login
+    
+    # ui.run()  # Lance la fenêtre et la boucle
+    ui.app.exec()  # Start event loop (replaces ui.run())
 
 if __name__ == "__main__":
     main()

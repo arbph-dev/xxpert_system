@@ -56,3 +56,14 @@ class AppController:
         # Add other choices
 
     # No run() with while; all async via events/choices
+
+
+    def handle_event(self, event: Event):
+        if event.event_type == "class_selected":
+            class_name = event.payload.get("class_name")
+            if class_name:
+                # Exemple : charger les propriétés de la classe dans le table tab
+                columns = ["Name"]
+                rows = [(prop,) for prop in self.kb.get_all_props_for_class(class_name)]
+                self.ui.show_table(f"Props de {class_name}", columns, rows)
+        # No run() with while; all async via events/choices
