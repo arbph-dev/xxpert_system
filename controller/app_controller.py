@@ -9,6 +9,8 @@ from ui.console_ui import ConsoleUI
 from core.models.event import Event
 from core.models.question import Question
 from core.services.class_service import ClassService
+from core.services.property_service import PropertyService
+from core.services.instance_service import InstanceService
 from core.models.command import Command
 
 
@@ -23,7 +25,8 @@ class AppController:
         self.um = UserManager(self.kb) # self.um = UserManager(self.kb, self.wm)
 
         self.class_service = ClassService(self.kb, self.wm)
-        
+        self.property_service = PropertyService(self.kb, self.wm)
+        self.instance_service = InstanceService(self.kb, self.wm)
         #user_id, username, role = self.um.login(self.ui)  # Pass UI
 
 
@@ -32,14 +35,42 @@ class AppController:
         self.user_id = user_id  # Store for commands
         self.role = role
         self.wm = WorkingMemory(self.kb)
-        choices = ["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"]
+        # choices = ["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"]
+        # if role == 'admin':
+        #    choices += ["20", "21"]
+
+        choices = [
+            "0: Quitter",
+            "1: Lister classes",
+            "2: Lister instances",
+            "3: Ajouter classe",
+            "4: Ajouter propriété",
+            "5: Ajouter instance",
+            "6: Modifier classe",
+            "7: Modifier propriété",
+            "8: Modifier instance",
+            "9: Supprimer classe",
+            "10: Supprimer propriété",
+            "11: Supprimer instance",
+            "12: Lister propriétés d'une classe",
+            "13: Lister instances d'une classe",
+            "14: Exécuter inférence forward",
+            "15: Exécuter inférence backward"
+        ]
         if role == 'admin':
-            choices += ["20", "21"]
+            choices += [
+                "20: Valider submissions",
+                "21: Gérer utilisateurs"
+            ]
+
         self.ui.handle_event(Event("app_start", "controller"))
         self.ui.handle_event(Event("menu_requested", "controller", payload={"choices": choices, "role": role}))
 
     def handle_choice(self, choice):
-        if choice == "3":
+        # Extraire le numéro de la choice (ex: "2: Lister instances" → "2")
+        choice_num = choice.split(":")[0].strip()
+
+        if choice_num == "3":
             name_q = Question("input", "class_name", "Nom de la classe")
             answer = self.ui.ask_question(name_q)
             parent_q = Question("choice", "parent", "Parent (optional)", choices=self.kb.get_all_class_names())
@@ -47,11 +78,47 @@ class AppController:
             cmd = Command("add_class", parameters={"name": answer.value, "parent": parent_answer.value}, actor=self.user_id)
             event = self.class_service.handle_command(cmd)
             self.ui.handle_event(event)
-        elif choice == "1":  # Assume "1" = Lister classes
+        elif choice_num == "1":  # Assume "1" = Lister classes
             event = Event("table_requested", "controller", payload={"table_name": "classes"})
-            self.ui.handle_event(event)            
+            self.ui.handle_event(event)
 
-        elif choice == "0":
+        elif choice_num == "2":  # Lister instances
+            event = Event("table_requested", "controller", payload={"table_name": "instances"})
+            self.ui.handle_event(event)
+        
+        elif choice_num == "4":  # Ajouter propriété
+            name_q = Question("input", "prop_name", "Nom de la propriété")
+            answer = self.ui.ask_question(name_q)
+            type_q = Question("choice", "type", "Type de propriété", choices=["string", "int", "float", "bool"])
+            type_answer = self.ui.ask_question(type_q)
+            class_q = Question("choice", "class_name", "Attacher à classe (optional)", choices=self.kb.get_all_class_names())
+            class_answer = self.ui.ask_question(class_q)
+            cmd = Command("add_property", parameters={"name": answer.value, "type": type_answer.value, "class_name": class_answer.value}, actor=self.user_id)
+            event = self.property_service.handle_command(cmd)  # Assume self.property_service = PropertyService(self.kb, self.wm)
+            self.ui.handle_event(event)
+        
+        elif choice_num == "5":  # Ajouter instance
+            name_q = Question("input", "inst_name", "Nom de l'instance")
+            answer = self.ui.ask_question(name_q)
+            class_q = Question("choice", "class_name", "Classe associée", choices=self.kb.get_all_class_names())
+            class_answer = self.ui.ask_question(class_q)
+            cmd = Command("add_instance", parameters={"name": answer.value, "class_name": class_answer.value}, actor=self.user_id)
+            event = self.instance_service.handle_command(cmd)  # Assume self.instance_service = InstanceService(self.kb, self.wm)
+            self.ui.handle_event(event)
+        
+        # Ajouter similair pour 6-15, ex. pour "12": select class then load props in table
+        elif choice_num == "12":
+            class_q = Question("choice", "class_name", "Classe à lister propriétés", choices=self.kb.get_all_class_names())
+            class_answer = self.ui.ask_question(class_q)
+            event = Event("table_requested", "controller", payload={"table_name": "props", "filter": {"class_name": class_answer.value}})
+            self.ui.handle_event(event)
+        
+        # Pour admin: "20" lister pending submissions, etc.
+        elif choice_num == "20" and self.role == 'admin':
+            # Logic pour valider submissions (utiliser get_pending_submissions)
+            pass
+        
+        elif choice_num == "0":
             QApplication.quit()
         # Add other choices
 

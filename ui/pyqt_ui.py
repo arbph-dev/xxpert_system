@@ -132,11 +132,12 @@ class PyQtUI(BaseUI):
 
         elif event.event_type == "table_requested":
             table_name = event.payload.get("table_name")
+            filter_data = event.payload.get("filter", {})
             if table_name:
                 self.table_combo.setCurrentText(table_name.capitalize())
-                self.load_table(table_name.capitalize())
+                self.load_table(table_name.capitalize(), filter_data)  # Ajouter param filter
                 self.dashboard.setCurrentWidget(self.table_tab)
-   
+  
         else:
             self.status_bar.showMessage(f"{event.event_type}: {event.payload}", 5000)
             current_log = self.log_tab.text()
@@ -196,7 +197,59 @@ class PyQtUI(BaseUI):
         return val.replace("[temp] ", "") if ok else None
     
     # DEV
-    def load_table(self, table_name):
+
+    def load_table(self, table_name, filter_data=None):
+        if filter_data is None:
+            filter_data = {}
+
+        if DEBUG:
+            print(f"load_table called with {table_name}, filter: {filter_data}")
+
+        if not self.controller or not self.controller.kb:
+            if DEBUG:
+                print("load_table: Controller or KB None, returning early")
+            return
+
+        kb = self.controller.kb
+        columns = []
+        rows = []
+
+        if table_name == "Classes":
+            columns = ["ID", "Name", "Parent Name"]
+            rows = kb.get_all_classes()
+
+        elif table_name == "Instances":
+            columns = ["ID", "Name", "Class Name"]
+            rows = kb.get_all_instances_global()
+
+        elif table_name == "Props":
+            # Cas filtré : on veut les propriétés d'une classe spécifique
+            class_filter = filter_data.get("class_name")
+            if class_filter:
+                columns = ["Name", "Type"]  # Plus léger, pas besoin d'ID ici
+                prop_names = kb.get_all_props_for_class(class_filter)
+                rows = []
+                for name in prop_names:
+                    ptype = kb.get_property_type(name) or "string"
+                    rows.append((name, ptype))
+                title = f"Propriétés de {class_filter}"
+            else:
+                # Cas global : toutes les propriétés
+                columns = ["ID", "Name", "Type"]
+                rows = kb.get_all_properties()
+                title = "Table: Props"
+
+        elif table_name == "Events":
+            columns = ["ID", "Type", "Source", "Entity", "Payload", "Severity", "Timestamp"]
+            rows = kb.get_all_events(limit=100)
+            title = "Table: Events"
+
+        else:
+            return  # Table inconnue
+
+        self.show_table(title if 'title' in locals() else f"Table: {table_name}", columns, rows)
+
+    def load_tableOLD(self, table_name):
         if DEBUG:
            print(f"load_table called with {table_name}")
            print(f"Controller: {self.controller}, KB: {self.controller.kb if self.controller else None}")        
@@ -208,17 +261,25 @@ class PyQtUI(BaseUI):
         kb = self.controller.kb
         columns = []
         rows = []
+        
         if table_name == "Classes":
             columns = ["ID", "Name", "Parent Name"]
             if DEBUG:
                 print("Fetching classes...")            
             rows = kb.get_all_classes()  
+        
         elif table_name == "Instances":
             columns = ["ID", "Name", "Class Name"]
             rows = kb.get_all_instances_global()  
+
         elif table_name == "Props":  # Ou "Properties"
-            columns = ["ID", "Name", "Type"]
-            rows = kb.get_all_properties()  
+            if filter_data.get("class_name"):
+                columns = ["Name", "Type"]
+                rows = [(name, self.controller.kb.get_property_type(name)) for name in self.controller.kb.get_all_props_for_class(filter_data["class_name"])]            
+            else:
+                columns = ["ID", "Name", "Type"]
+                rows = kb.get_all_properties()  
+        
         elif table_name == "Events":
             columns = ["ID", "Type", "Source", "Entity", "Payload", "Severity", "Timestamp"]
             rows = kb.get_all_events(limit=100)  

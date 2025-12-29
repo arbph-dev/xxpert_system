@@ -221,25 +221,25 @@ class KnowledgeBase:
 
     # --- Propriétés ---
     def add_property(self, name, ptype="string"):
-        name = name.strip().lower()
-
-        if not name:
-            console.print("[red]Le nom de la propriété ne peut pas être vide[/]")
+        if not name or not isinstance(name, str):
             return False
-        valid_types = {"string", "bool", "int", "float", "date"}
+        name = name.strip().lower()
+        if not name:
+            return False
 
+        valid_types = {"string", "bool", "int", "float"}
         if ptype not in valid_types:
-            console.print(f"[red]Type invalide : {ptype}. Doit être dans {valid_types}[/]")
-            return False    
-
+            return False
 
         if self.get_property_id(name):
-            console.print(f"[red]Propriété '{name}' existe déjà[/]")
+            return False  # Existe déjà
+
+        try:
+            self.cursor.execute("INSERT INTO seprop (name, type) VALUES (?, ?)", (name, ptype))
+            self.commit()
+            return True
+        except sqlite3.IntegrityError:
             return False
-        self.cursor.execute("INSERT INTO seprop (name, type) VALUES (?, ?)", (name, ptype))
-        self.commit()
-        console.print(Panel(f"Propriété [cyan]'{name}'[/] ({ptype}) créée", style="cyan"))
-        return True
 
     def link_property_to_class(self, class_name, prop_name):
         c_id = self.get_class_id(class_name)
@@ -256,31 +256,69 @@ class KnowledgeBase:
             console.print("[yellow]Déjà liée[/]")
             return False
 
-    # --- Instances ---
-    def add_instance(self, name, class_name):
-        name = name.strip()
+    def attach_property_to_class(self, class_name, prop_name):
+        if not class_name or not isinstance(class_name, str):
+            return False
+        if not prop_name or not isinstance(prop_name, str):
+            return False
 
         class_name = class_name.strip()
-        if not name:
-            console.print("[red]Le nom de l'instance ne peut pas être vide[/]")
-            return False
-        
-        if not class_name:
-            console.print("[red]La classe ne peut pas être vide[/]")
+        prop_name = prop_name.strip().lower()
+
+        if not class_name or not prop_name:
             return False
 
         c_id = self.get_class_id(class_name)
         if not c_id:
-            console.print("[red]Classe inconnue[/]")
+            return False  # Classe inconnue
+
+        p_id = self.get_property_id(prop_name)
+        if not p_id:
+            return False  # Propriété inconnue
+
+        try:
+            self.cursor.execute(
+                "INSERT OR IGNORE INTO seclass_prop (class_id, prop_id) VALUES (?, ?)",
+                (c_id, p_id)
+            )
+            self.commit()
+            return True
+        except sqlite3.Error:
             return False
-        self.cursor.execute("SELECT 1 FROM seinst WHERE LOWER(name)=LOWER(?) AND class_id=?", (name, c_id))
+
+    # --- Instances ---
+    def add_instance(self, name, class_name):
+        if not name or not isinstance(name, str):
+            return False
+        if not class_name or not isinstance(class_name, str):
+            return False
+
+        name = name.strip()
+        class_name = class_name.strip()
+
+        if not name:
+            return False
+        if not class_name:
+            return False
+
+        c_id = self.get_class_id(class_name)
+        if not c_id:
+            return False  # Classe inconnue
+
+        # Vérifier unicité (name + class_id)
+        self.cursor.execute(
+            "SELECT 1 FROM seinst WHERE LOWER(name) = LOWER(?) AND class_id = ?",
+            (name, c_id)
+        )
         if self.cursor.fetchone():
-            console.print(f"[red]Instance '{name}' existe déjà[/]")
+            return False  # Déjà existe
+
+        try:
+            self.cursor.execute("INSERT INTO seinst (name, class_id) VALUES (?, ?)", (name, c_id))
+            self.commit()
+            return True
+        except sqlite3.IntegrityError:
             return False
-        self.cursor.execute("INSERT INTO seinst (name, class_id) VALUES (?, ?)", (name, c_id))
-        self.commit()
-        console.print(Panel(f"Instance [green]'{name}'[/] ajoutée à [green]'{class_name}'[/]", style="green"))
-        return True
 
     def get_all_instances(self, class_name):
         c_id = self.get_class_id(class_name)
@@ -305,6 +343,28 @@ class KnowledgeBase:
         return Fact(..., value=None, status=FactStatus.UNKNOWN)
 
 
+    def instance_exists(self, name, class_name):
+        if not name or not isinstance(name, str):
+            return False
+        if not class_name or not isinstance(class_name, str):
+            return False
+
+        name = name.strip()
+        class_name = class_name.strip()
+
+        if not name or not class_name:
+            return False
+
+        c_id = self.get_class_id(class_name)
+        if not c_id:
+            return False
+
+        self.cursor.execute(
+            "SELECT 1 FROM seinst WHERE LOWER(name) = LOWER(?) AND class_id = ?",
+            (name, c_id)
+        )
+        return bool(self.cursor.fetchone())
+
     # --- set_instance_value ---
     def set_instance_value(self, inst_name, class_name, prop_name, value):
         c_id = self.get_class_id(class_name)
@@ -327,11 +387,16 @@ class KnowledgeBase:
         return True
 
     def get_property_type(self, prop_name):
-        p_id = self.get_property_id(prop_name)
-        if not p_id:
+        if not prop_name or not isinstance(prop_name, str):
             return None
-        self.cursor.execute("SELECT type FROM seprop WHERE id=?", (p_id,))
-        return self.cursor.fetchone()[0]
+        
+        prop_name = prop_name.strip().lower()
+        if not prop_name:
+            return None
+
+        self.cursor.execute("SELECT type FROM seprop WHERE LOWER(name) = ?", (prop_name,))
+        row = self.cursor.fetchone()
+        return row[0] if row else None
 
     def get_all_props_for_classOLD(self, class_name):
         c_id = self.get_class_id(class_name)
