@@ -69,8 +69,18 @@ class AppController:
     def handle_choice(self, choice):
         # Extraire le numéro de la choice (ex: "2: Lister instances" → "2")
         choice_num = choice.split(":")[0].strip()
-
-        if choice_num == "3":
+        # Lister classes
+        if choice_num == "1":
+            event = Event("table_requested", "controller", payload={"table_name": "classes"})
+            self.ui.handle_event(event)
+        
+        # Lister instances
+        elif choice_num == "2":  
+            event = Event("table_requested", "controller", payload={"table_name": "instances"})
+            self.ui.handle_event(event)
+        
+        # Ajouter classes
+        elif choice_num == "3":  
             name_q = Question("input", "class_name", "Nom de la classe")
             answer = self.ui.ask_question(name_q)
             parent_q = Question("choice", "parent", "Parent (optional)", choices=self.kb.get_all_class_names())
@@ -78,15 +88,9 @@ class AppController:
             cmd = Command("add_class", parameters={"name": answer.value, "parent": parent_answer.value}, actor=self.user_id)
             event = self.class_service.handle_command(cmd)
             self.ui.handle_event(event)
-        elif choice_num == "1":  # Assume "1" = Lister classes
-            event = Event("table_requested", "controller", payload={"table_name": "classes"})
-            self.ui.handle_event(event)
-
-        elif choice_num == "2":  # Lister instances
-            event = Event("table_requested", "controller", payload={"table_name": "instances"})
-            self.ui.handle_event(event)
         
-        elif choice_num == "4":  # Ajouter propriété
+        # Ajouter propriété
+        elif choice_num == "4":  
             name_q = Question("input", "prop_name", "Nom de la propriété")
             answer = self.ui.ask_question(name_q)
             type_q = Question("choice", "type", "Type de propriété", choices=["string", "int", "float", "bool"])
@@ -97,7 +101,8 @@ class AppController:
             event = self.property_service.handle_command(cmd)  # Assume self.property_service = PropertyService(self.kb, self.wm)
             self.ui.handle_event(event)
         
-        elif choice_num == "5":  # Ajouter instance
+        # Ajouter instance
+        elif choice_num == "5":
             name_q = Question("input", "inst_name", "Nom de l'instance")
             answer = self.ui.ask_question(name_q)
             class_q = Question("choice", "class_name", "Classe associée", choices=self.kb.get_all_class_names())
@@ -105,8 +110,47 @@ class AppController:
             cmd = Command("add_instance", parameters={"name": answer.value, "class_name": class_answer.value}, actor=self.user_id)
             event = self.instance_service.handle_command(cmd)  # Assume self.instance_service = InstanceService(self.kb, self.wm)
             self.ui.handle_event(event)
+        # "6: Modifier classe"
         
-        # Ajouter similair pour 6-15, ex. pour "12": select class then load props in table
+        # "7: Modifier propriété"
+        elif choice_num == "7":  
+            name_q = Question("choice", "prop_name", "Propriété à modifier", choices=self.kb.get_all_property_names())
+            answer = self.ui.ask_question(name_q)
+            if not answer.value:
+                return
+
+            new_name_q = Question("input", "new_name", "Nouveau nom (laisser vide pour ignorer)")
+            new_name_answer = self.ui.ask_question(new_name_q)
+            new_name = new_name_answer.value.strip() if new_name_answer.value else None
+
+            type_q = Question("choice", "new_type", "Nouveau type (laisser vide pour ignorer)", choices=["", "string", "int", "float", "bool"])
+            type_answer = self.ui.ask_question(type_q)
+            new_type = type_answer.value if type_answer.value else None
+
+            if not new_name and not new_type:
+                self.ui.handle_event(Event("info", "controller", payload="Aucune modification spécifiée"))
+                return
+
+            cmd = Command("modify_property", parameters={"name": answer.value, "new_name": new_name, "new_type": new_type}, actor=self.user_id)
+            event = self.property_service.handle_command(cmd)
+            self.ui.handle_event(event)
+            
+        # "10: Supprimer propriété"
+        elif choice_num == "10":
+            name_q = Question("choice", "prop_name", "Propriété à supprimer", choices=self.kb.get_all_property_names())
+            answer = self.ui.ask_question(name_q)
+            if not answer.value:
+                return
+
+            confirm = self.ui.confirm(f"Confirmer la suppression de '{answer.value}' ? Cela effacera les liens et valeurs associées.")
+            if not confirm:
+                return
+
+            cmd = Command("delete_property", parameters={"name": answer.value}, actor=self.user_id)
+            event = self.property_service.handle_command(cmd)
+            self.ui.handle_event(event)        
+        
+        # "12: Lister propriétés d'une classe"
         elif choice_num == "12":
             class_q = Question("choice", "class_name", "Classe à lister propriétés", choices=self.kb.get_all_class_names())
             class_answer = self.ui.ask_question(class_q)

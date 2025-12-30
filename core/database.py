@@ -8,6 +8,8 @@ from core.models.event import Event
 from core.inference import ForwardEngine, BackwardEngine
 from core.services.EntityService import EntityService
 import json
+import uuid
+import datetime  # Ensure at top
 
 console = Console()
 DB_FILE = "data/XXpert.db"
@@ -179,6 +181,86 @@ class KnowledgeBase:
             print(f"get_all_classes: fetched {len(rows)} rows: {rows}")
         return rows        
 
+    #--------------------------------------------------------------------------
+    # 2025-12-30 
+    #   database.py
+    #  - Ajout de delete_property (avec vérifications)
+    #  - Ajout de modify_property (ex: changer type)
+    #       Mise à jour de modify_property pour supporter rename et change type
+
+    def delete_property(self, prop_name):
+        if not prop_name or not isinstance(prop_name, str):
+            return False
+
+        prop_name = prop_name.strip().lower()
+        if not prop_name:
+            return False
+
+        p_id = self.get_property_id(prop_name)
+        if not p_id:
+            return False  # Propriété inconnue
+
+        try:
+            # Supprimer les liens avec classes
+            self.cursor.execute("DELETE FROM seclass_prop WHERE prop_id = ?", (p_id,))
+            # Supprimer les valeurs d'instances
+            self.cursor.execute("DELETE FROM seinst_value WHERE prop_id = ?", (p_id,))
+            # Supprimer les stats et thresholds
+            self.cursor.execute("DELETE FROM seprop_stats WHERE prop_id = ?", (p_id,))
+            self.cursor.execute("DELETE FROM seprop_manual_thresholds WHERE prop_id = ?", (p_id,))
+            # Supprimer la propriété elle-même
+            self.cursor.execute("DELETE FROM seprop WHERE id = ?", (p_id,))
+            self.commit()
+            return True
+        except sqlite3.Error:
+            return False
+
+    # database.py - Mise à jour de modify_property pour supporter rename et change type
+    def modify_property(self, prop_name, new_name=None, new_type=None):
+        if not prop_name or not isinstance(prop_name, str):
+            return False
+
+        prop_name = prop_name.strip().lower()
+        if not prop_name:
+            return False
+
+        p_id = self.get_property_id(prop_name)
+        if not p_id:
+            return False  # Propriété inconnue
+
+        updated = False
+
+        if new_name:
+            if not isinstance(new_name, str) or not new_name.strip():
+                return False
+            new_name = new_name.strip().lower()
+
+            if self.get_property_id(new_name):
+                return False  # Nouveau nom déjà pris
+
+            try:
+                self.cursor.execute("UPDATE seprop SET name = ? WHERE id = ?", (new_name, p_id))
+                updated = True
+            except sqlite3.Error:
+                return False
+
+        if new_type:
+            valid_types = {"string", "bool", "int", "float"}
+            if new_type not in valid_types:
+                return False
+
+            try:
+                self.cursor.execute("UPDATE seprop SET type = ? WHERE id = ?", (new_type, p_id))
+                updated = True
+                # Note: Changer type peut nécessiter cleanup des valeurs existantes si incompatible, mais omis pour simplicité
+            except sqlite3.Error:
+                return False
+
+        if updated:
+            self.commit()
+            return True
+
+        return False  # Rien à modifier
 
     # Ajout DEV 25-12-27
     def get_all_properties(self):
@@ -216,24 +298,25 @@ class KnowledgeBase:
         console.print(Panel(f"Classe [green]'{name}'[/] créée", style="green"))
 
         event = Event("class_added", "database", entity=name)
-        return True, event  # return True, Event("class_added", "database", entity=name)  # Return tuple (success, event)
         self.store_event(event)
+        return True, event  # return True, Event("class_added", "database", entity=name)  # Return tuple (success, event)
+
 
     # --- Propriétés ---
+    # database.py - Add 'uuid' to valid_types in add_property
+    import uuid  # Add at top if not present
+
     def add_property(self, name, ptype="string"):
         if not name or not isinstance(name, str):
             return False
         name = name.strip().lower()
         if not name:
             return False
-
-        valid_types = {"string", "bool", "int", "float"}
+        valid_types = {"string", "bool", "int", "float", "date", "datetime", "time", "json", "timedelta", "uuid"}  # Added 'uuid'
         if ptype not in valid_types:
             return False
-
         if self.get_property_id(name):
-            return False  # Existe déjà
-
+            return False
         try:
             self.cursor.execute("INSERT INTO seprop (name, type) VALUES (?, ?)", (name, ptype))
             self.commit()
@@ -256,63 +339,46 @@ class KnowledgeBase:
             console.print("[yellow]Déjà liée[/]")
             return False
 
+    # database.py - attach_property_to_class with validation rules
     def attach_property_to_class(self, class_name, prop_name):
         if not class_name or not isinstance(class_name, str):
             return False
         if not prop_name or not isinstance(prop_name, str):
             return False
-
         class_name = class_name.strip()
         prop_name = prop_name.strip().lower()
-
         if not class_name or not prop_name:
             return False
-
         c_id = self.get_class_id(class_name)
         if not c_id:
-            return False  # Classe inconnue
-
+            return False
         p_id = self.get_property_id(prop_name)
         if not p_id:
-            return False  # Propriété inconnue
-
+            return False
         try:
-            self.cursor.execute(
-                "INSERT OR IGNORE INTO seclass_prop (class_id, prop_id) VALUES (?, ?)",
-                (c_id, p_id)
-            )
+            self.cursor.execute("INSERT OR IGNORE INTO seclass_prop (class_id, prop_id) VALUES (?, ?)", (c_id, p_id))
             self.commit()
             return True
         except sqlite3.Error:
             return False
 
     # --- Instances ---
+    # database.py - add_instance with validation rules
     def add_instance(self, name, class_name):
         if not name or not isinstance(name, str):
             return False
         if not class_name or not isinstance(class_name, str):
             return False
-
         name = name.strip()
         class_name = class_name.strip()
-
-        if not name:
+        if not name or not class_name:
             return False
-        if not class_name:
-            return False
-
         c_id = self.get_class_id(class_name)
         if not c_id:
-            return False  # Classe inconnue
-
-        # Vérifier unicité (name + class_id)
-        self.cursor.execute(
-            "SELECT 1 FROM seinst WHERE LOWER(name) = LOWER(?) AND class_id = ?",
-            (name, c_id)
-        )
+            return False
+        self.cursor.execute("SELECT 1 FROM seinst WHERE LOWER(name)=LOWER(?) AND class_id=?", (name, c_id))
         if self.cursor.fetchone():
-            return False  # Déjà existe
-
+            return False
         try:
             self.cursor.execute("INSERT INTO seinst (name, class_id) VALUES (?, ?)", (name, c_id))
             self.commit()
@@ -330,61 +396,192 @@ class KnowledgeBase:
     # --- Valeurs ---
 
     def get_instance_value(self, inst_name, class_name, prop_name):
-        c_id = self.get_class_id(class_name)
-        
-        if not c_id:
+        if not inst_name or not isinstance(inst_name, str):
             return None
-        self.cursor.execute("SELECT id FROM seinst WHERE name=? AND class_id=?", (inst_name, c_id))
+        if not class_name or not isinstance(class_name, str):
+            return None
+        if not prop_name or not isinstance(prop_name, str):
+            return None
+
+        inst_name = inst_name.strip()
+        class_name = class_name.strip()
+        prop_name = prop_name.strip().lower()
+
+        if not inst_name or not class_name or not prop_name:
+            return None
+
+        class_id = self.get_class_id(class_name)
+        if not class_id:
+            return None
+
+        self.cursor.execute("SELECT id FROM seinst WHERE LOWER(name) = LOWER(?) AND class_id = ?", (inst_name, class_id))
         row = self.cursor.fetchone()
-        # 
-        if row:
-            val = self._parse_value(row[0], ptype)
-            return Fact(entity_type="instance", entity_id=inst_name, property_name=prop_name, value=val, value_type=ptype)
-        return Fact(..., value=None, status=FactStatus.UNKNOWN)
+        if not row:
+            return None
+        inst_id = row[0]
+
+        prop_id = self.get_property_id(prop_name)
+        if not prop_id:
+            return None
+
+        self.cursor.execute("SELECT value FROM seinst_value WHERE inst_id = ? AND prop_id = ?", (inst_id, prop_id))
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+
+        stored = row[0]
+        if stored is None:
+            return None
+
+        ptype = self.get_property_type(prop_name)
+        try:
+            if ptype == "bool":
+                return stored.lower() in ("true", "1", "yes")
+            elif ptype == "int":
+                return int(stored)
+            elif ptype == "float":
+                return float(stored)
+            elif ptype == "date":
+                return datetime.date.fromisoformat(stored)
+            elif ptype == "datetime":
+                return datetime.datetime.fromisoformat(stored)
+            elif ptype == "time":
+                return datetime.time.fromisoformat(stored)
+            elif ptype == "json":
+                return json.loads(stored)
+            elif ptype == "timedelta":
+                return datetime.timedelta(seconds=float(stored))
+            elif ptype == "uuid":
+                return uuid.UUID(stored)
+            else:  # string or default
+                return stored
+        except ValueError:
+            return None  # Invalid stored value for type
 
 
+    # database.py - instance_exists with validation rules
     def instance_exists(self, name, class_name):
         if not name or not isinstance(name, str):
             return False
         if not class_name or not isinstance(class_name, str):
             return False
-
         name = name.strip()
         class_name = class_name.strip()
-
         if not name or not class_name:
             return False
-
         c_id = self.get_class_id(class_name)
         if not c_id:
             return False
-
-        self.cursor.execute(
-            "SELECT 1 FROM seinst WHERE LOWER(name) = LOWER(?) AND class_id = ?",
-            (name, c_id)
-        )
+        self.cursor.execute("SELECT 1 FROM seinst WHERE LOWER(name)=LOWER(?) AND class_id=?", (name, c_id))
         return bool(self.cursor.fetchone())
 
     # --- set_instance_value ---
     def set_instance_value(self, inst_name, class_name, prop_name, value):
-        c_id = self.get_class_id(class_name)
-        if not c_id:
+        if not inst_name or not isinstance(inst_name, str):
             return False
-        self.cursor.execute("SELECT id FROM seinst WHERE name=? AND class_id=?", (inst_name, c_id))
+        if not class_name or not isinstance(class_name, str):
+            return False
+        if not prop_name or not isinstance(prop_name, str):
+            return False
+
+        inst_name = inst_name.strip()
+        class_name = class_name.strip()
+        prop_name = prop_name.strip().lower()
+
+        if not inst_name or not class_name or not prop_name:
+            return False
+
+        class_id = self.get_class_id(class_name)
+        if not class_id:
+            return False
+
+        self.cursor.execute("SELECT id FROM seinst WHERE LOWER(name) = LOWER(?) AND class_id = ?", (inst_name, class_id))
         row = self.cursor.fetchone()
         if not row:
             return False
         inst_id = row[0]
-        p_id = self.get_property_id(prop_name)
-        if not p_id:
+
+        prop_id = self.get_property_id(prop_name)
+        if not prop_id:
             return False
-        stored = "true" if value is True else "false" if value is False else str(value) if value is not None else None
-        self.cursor.execute("""
-            INSERT INTO seinst_value (inst_id, prop_id, value) VALUES (?, ?, ?)
-            ON CONFLICT(inst_id, prop_id) DO UPDATE SET value=excluded.value
-        """, (inst_id, p_id, stored))
-        self.commit()
-        return True
+
+        ptype = self.get_property_type(prop_name)
+        if value is not None:
+            try:
+                if ptype == "bool":
+                    if not isinstance(value, bool):
+                        return False
+                elif ptype == "int":
+                    value = int(value)
+                elif ptype == "float":
+                    value = float(value)
+                elif ptype == "string":
+                    if not isinstance(value, str):
+                        return False
+                elif ptype == "date":
+                    if isinstance(value, str):
+                        value = datetime.date.fromisoformat(value)
+                    elif isinstance(value, datetime.date):
+                        pass
+                    else:
+                        return False
+                    stored = value.isoformat()
+                elif ptype == "datetime":
+                    if isinstance(value, str):
+                        value = datetime.datetime.fromisoformat(value)
+                    elif isinstance(value, datetime.datetime):
+                        pass
+                    else:
+                        return False
+                    stored = value.isoformat()
+                elif ptype == "time":
+                    if isinstance(value, str):
+                        value = datetime.time.fromisoformat(value)
+                    elif isinstance(value, datetime.time):
+                        pass
+                    else:
+                        return False
+                    stored = value.isoformat()
+                elif ptype == "json":
+                    stored = json.dumps(value)
+                elif ptype == "timedelta":
+                    if isinstance(value, str):
+                        value = datetime.timedelta(seconds=float(value))
+                    elif isinstance(value, datetime.timedelta):
+                        pass
+                    else:
+                        return False
+                    stored = str(value.total_seconds())
+                elif ptype == "uuid":
+                    if isinstance(value, str):
+                        value = uuid.UUID(value)
+                    elif isinstance(value, uuid.UUID):
+                        pass
+                    else:
+                        return False
+                    stored = str(value)
+                else:
+                    return False  # Type inconnu
+            except (ValueError, TypeError):
+                return False  # Conversion/serialize échouée
+
+        stored = None if value is None else ("true" if value is True else "false" if value is False else str(value))
+
+        try:
+            self.cursor.execute("""
+                INSERT INTO seinst_value (inst_id, prop_id, value)
+                VALUES (?, ?, ?)
+                ON CONFLICT(inst_id, prop_id) DO UPDATE SET value = excluded.value
+            """, (inst_id, prop_id, stored))
+            self.commit()
+
+            if isinstance(value, (int, float)):
+                if ptype in ("int", "float"):
+                    self._update_stats(class_id, prop_id, value)
+
+            return True
+        except sqlite3.Error:
+            return False
 
     def get_property_type(self, prop_name):
         if not prop_name or not isinstance(prop_name, str):
@@ -456,7 +653,7 @@ class KnowledgeBase:
         return rows
 
 
-    def _update_stats(self, class_id, prop_id, value):
+    def _update_statsOLD(self, class_id, prop_id, value):
         if value is None or not isinstance(value, (int, float)):
             return
 
@@ -487,6 +684,54 @@ class KnowledgeBase:
         # Recalculer médiane et écart-type (plus lourd mais précis)
         self._recalculate_full_stats(class_id, prop_id)
 
+
+
+# database.py - _update_stats améliorée
+    def _update_stats(self, class_id, prop_id, value):
+        if value is None or not isinstance(value, (int, float)):
+            return False
+
+        try:
+            # Récupérer stats actuelles
+            self.cursor.execute("""
+                SELECT instance_count, min_value, max_value, mean_value 
+                FROM seprop_stats WHERE class_id=? AND prop_id=?
+            """, (class_id, prop_id))
+            row = self.cursor.fetchone()
+
+            if row:
+                count, min_v, max_v, mean = row
+                if count is None:  # Sécurité si données corrompues
+                    count = 0
+                count += 1
+                # Formule incrémentale stable pour la moyenne
+                new_mean = mean + (value - mean) / count if mean is not None else value
+                new_min = min(min_v, value) if min_v is not None else value
+                new_max = max(max_v, value) if max_v is not None else value
+
+                self.cursor.execute("""
+                    UPDATE seprop_stats SET 
+                        instance_count=?, min_value=?, max_value=?, mean_value=?, updated_at=CURRENT_TIMESTAMP
+                    WHERE class_id=? AND prop_id=?
+                """, (count, new_min, new_max, new_mean, class_id, prop_id))
+            else:
+                self.cursor.execute("""
+                    INSERT INTO seprop_stats 
+                    (class_id, prop_id, instance_count, min_value, max_value, mean_value)
+                    VALUES (?, ?, 1, ?, ?, ?)
+                """, (class_id, prop_id, value, value, value))
+
+            self.conn.commit()
+            self._recalculate_full_stats(class_id, prop_id)
+            return True
+        except sqlite3.Error:
+            return False
+
+
+
+
+
+
     def _register_default_rules(self):
         # Règles circuit électrique
         self.forward_engine.add_rule(['tension', 'intensite'], 'puissance', lambda u, i: u * i, "W")
@@ -502,9 +747,42 @@ class KnowledgeBase:
         self.backward_engine.add_rule('intensite', ['puissance', 'tension'], lambda p, u: p / u if u != 0 else None, "A")
         # Ajoute ici tes règles débit/dP quand prêt (ex. log)
 
-
-
+    # database.py - _recalculate_full_stats optimisée
     def _recalculate_full_stats(self, class_id, prop_id):
+        try:
+            self.cursor.execute("""
+                SELECT v.value FROM seinst_value v
+                JOIN seinst i ON v.inst_id = i.id
+                WHERE i.class_id = ? AND v.prop_id = ? AND v.value IS NOT NULL
+            """, (class_id, prop_id))
+            
+            values = []
+            for row in self.cursor.fetchall():
+                try:
+                    values.append(float(row[0]))
+                except (ValueError, TypeError):
+                    continue  # Ignorer les valeurs non convertibles
+
+            if not values:
+                # Plus aucune valeur numérique → supprimer les stats
+                self.cursor.execute("DELETE FROM seprop_stats WHERE class_id=? AND prop_id=?", (class_id, prop_id))
+                self.conn.commit()
+                return
+
+            median = statistics.median(values)
+            stdev = statistics.stdev(values) if len(values) > 1 else 0.0
+
+            self.cursor.execute("""
+                UPDATE seprop_stats SET 
+                    median_value=?, std_dev=?, updated_at=CURRENT_TIMESTAMP
+                WHERE class_id=? AND prop_id=?
+            """, (median, stdev, class_id, prop_id))
+            self.conn.commit()
+        except sqlite3.Error:
+            pass  # Silencieux : si erreur, on laisse les anciennes stats
+
+
+    def _recalculate_full_statsOLD(self, class_id, prop_id):
         self.cursor.execute("""
             SELECT v.value FROM seinst_value v
             JOIN seinst i ON v.inst_id = i.id
@@ -532,41 +810,7 @@ class KnowledgeBase:
         """, (median, stdev, class_id, prop_id))
         self.conn.commit()
 
-    def set_instance_value(self, inst_name, class_name, prop_name, value):
-        class_id = self.get_class_id(class_name)
-        if not class_id:
-            console.print("[red]Classe inconnue[/]")
-            return False
 
-        self.cursor.execute("SELECT id FROM seinst WHERE LOWER(name)=LOWER(?) AND class_id=?", (inst_name, class_id))
-        row = self.cursor.fetchone()
-        if not row:
-            console.print(f"[red]Instance '{inst_name}' non trouvée[/]")
-            return False
-        inst_id = row[0]
-
-        prop_id = self.get_property_id(prop_name)
-        if not prop_id:
-            console.print(f"[red]Propriété '{prop_name}' inconnue[/]")
-            return False
-
-        stored = None if value is None else ("true" if value is True else "false" if value is False else str(value))
-
-        self.cursor.execute("""
-            INSERT INTO seinst_value (inst_id, prop_id, value)
-            VALUES (?, ?, ?)
-            ON CONFLICT(inst_id, prop_id) DO UPDATE SET value = excluded.value
-        """, (inst_id, prop_id, stored))
-        self.commit()
-
-        # Mise à jour stats si numérique
-        if isinstance(value, (int, float)):
-            ptype = self.get_property_type(prop_name)
-            if ptype in ("int", "float"):
-                self._update_stats(class_id, prop_id, value)
-
-        console.print(f"[green]Valeur {prop_name} = {value} sauvegardée pour {inst_name}[/]")
-        return True
 
     def get_thresholds(self, class_name, prop_name):
         c_id = self.get_class_id(class_name)
