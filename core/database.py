@@ -10,6 +10,7 @@ from core.services.EntityService import EntityService
 import json
 import uuid
 import datetime  # Ensure at top
+import urllib.parse
 
 console = Console()
 DB_FILE = "data/XXpert.db"
