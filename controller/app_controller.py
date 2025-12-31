@@ -87,6 +87,9 @@ class AppController:
             parent_answer = self.ui.ask_question(parent_q)
             cmd = Command("add_class", parameters={"name": answer.value, "parent": parent_answer.value}, actor=self.user_id)
             event = self.class_service.handle_command(cmd)
+            
+            self.kb.store_event(event) #stocke en db
+            
             self.ui.handle_event(event)
         
         # Ajouter propriété
