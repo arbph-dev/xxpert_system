@@ -107,17 +107,20 @@ class PyQtUI(BaseUI):
         #self.table_tab = QTableWidget()
         self.table_tab = QWidget()  # Change de QTableWidget à QWidget pour layout
         table_layout = QVBoxLayout(self.table_tab)
+        
         self.table_combo = QComboBox()
         self.table_combo.addItems(["Classes", "Instances", "Props", "Events"])
         self.table_combo.currentTextChanged.connect(self.load_table)
         table_layout.addWidget(self.table_combo)
+        
         self.table_widget = QTableWidget()
         table_layout.addWidget(self.table_widget)
         self.dashboard.addTab(self.table_tab, "Tables")
         #if self.table_combo.count() > 0:
         #    self.load_table(self.table_combo.currentText())
 
-
+        self.values_tab = QTableWidget()
+        self.dashboard.addTab(self.values_tab, "Valeurs Instances")
 
         
         self.log_tab = QLabel("Log events :\n")
@@ -248,45 +251,30 @@ class PyQtUI(BaseUI):
             return  # Table inconnue
 
         self.show_table(title if 'title' in locals() else f"Table: {table_name}", columns, rows)
-
-    def load_tableOLD(self, table_name):
+    
+    # Add method to load instance values
+    def load_instance_values(self, inst_name, class_name):
         if DEBUG:
-           print(f"load_table called with {table_name}")
-           print(f"Controller: {self.controller}, KB: {self.controller.kb if self.controller else None}")        
-  
-        if not self.controller or not self.controller.kb:
-            if DEBUG:
-                print("load_table: Controller or KB None, returning early")            
-            return
+            print(f"Loading values for instance '{inst_name}' in class '{class_name}'")
+
         kb = self.controller.kb
-        columns = []
+        props = kb.get_all_props_for_class(class_name)
+        columns = ["Propriété", "Valeur"]
         rows = []
-        
-        if table_name == "Classes":
-            columns = ["ID", "Name", "Parent Name"]
-            if DEBUG:
-                print("Fetching classes...")            
-            rows = kb.get_all_classes()  
-        
-        elif table_name == "Instances":
-            columns = ["ID", "Name", "Class Name"]
-            rows = kb.get_all_instances_global()  
+        for prop in props:
+            value = kb.get_instance_value(inst_name, class_name, prop)
+            rows.append((prop, str(value) if value is not None else "None"))
 
-        elif table_name == "Props":  # Ou "Properties"
-            if filter_data.get("class_name"):
-                columns = ["Name", "Type"]
-                rows = [(name, self.controller.kb.get_property_type(name)) for name in self.controller.kb.get_all_props_for_class(filter_data["class_name"])]            
-            else:
-                columns = ["ID", "Name", "Type"]
-                rows = kb.get_all_properties()  
-        
-        elif table_name == "Events":
-            columns = ["ID", "Type", "Source", "Entity", "Payload", "Severity", "Timestamp"]
-            rows = kb.get_all_events(limit=100)  
-        self.show_table(f"Table: {table_name}", columns, rows)
-        if DEBUG:
-            print(f"show_table called with {len(rows)} rows")    
+        self.values_tab.setRowCount(len(rows))
+        self.values_tab.setColumnCount(len(columns))
+        self.values_tab.setHorizontalHeaderLabels(columns)
+        for i, row in enumerate(rows):
+            for j, val in enumerate(row):
+                self.values_tab.setItem(i, j, QTableWidgetItem(val))
 
+        self.dashboard.setCurrentWidget(self.values_tab)
+        self.dashboard.setTabText(self.dashboard.indexOf(self.values_tab), f"Valeurs de {inst_name}")
+    
     # show_table / show_tree : Update tabs
     def show_table(self, title, columns, rows):
         if DEBUG:

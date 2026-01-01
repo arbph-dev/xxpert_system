@@ -1,59 +1,60 @@
-# core/services/property_service.py - Service pour propriétés avec gestion d'erreurs via Events
+# core/services/property_service.py
+#  - Service pour propriétés avec gestion d'erreurs via Events
+#  - Adapt to staged mode with WM
+
 from core.models.command import Command
 from core.models.event import Event, Severity
 from core.workflow.working_memory import WorkingMemory
 
 class PropertyService:
     def __init__(self, kb, wm: WorkingMemory):
-        self.kb = kb
+        self.kb = kb  # Keep for queries, but writes go to WM
         self.wm = wm
 
     def handle_command(self, cmd: Command):
-        # add_property  
+        # add_property
         if cmd.command_type == "add_property":
             name = cmd.parameters.get("name")
             ptype = cmd.parameters.get("type", "string")
-            class_name = cmd.parameters.get("class_name")  # Optionnel
+            class_name = cmd.parameters.get("class_name")
 
             if not name or not isinstance(name, str):
                 return Event("error", "property_service", payload="Nom de propriété invalide ou manquant", severity=Severity.ERROR)
 
-            # Appel à KB, qui gère déjà les validations internes
-            if not self.kb.add_property(name, ptype):
-                return Event("error", "property_service", payload=f"Impossible d'ajouter la propriété '{name}' (existe déjà ou type invalide)", severity=Severity.ERROR)
+            success = self.wm.add_property(name, ptype)  # Stage in WM
+            if not success:
+                return Event("add_property_failed", "property_service", entity=name, severity=Severity.ERROR, payload="Propriété existe déjà ou type invalide")
 
             if class_name:
-                if not self.kb.attach_property_to_class(class_name, name):
-                    return Event("error", "property_service", payload=f"Impossible d'attacher '{name}' à la classe '{class_name}'", severity=Severity.ERROR)
+                success = self.wm.attach_property_to_class(class_name, name)
+                if not success:
+                    return Event("error", "property_service", payload=f"Impossible d'attacher '{name}' à '{class_name}'", severity=Severity.ERROR)
 
-            return Event("property_added", "property_service", entity=name)
-        
-        # delete_property            
+            return Event("property_proposed", "property_service", entity=name)  # Changed to "proposed" for staged mode
+        # delete_property
         elif cmd.command_type == "delete_property":
             name = cmd.parameters.get("name")
 
             if not name or not isinstance(name, str):
                 return Event("error", "property_service", payload="Nom de propriété invalide ou manquant", severity=Severity.ERROR)
 
-            if not self.kb.delete_property(name):
-                return Event("error", "property_service", payload=f"Impossible de supprimer la propriété '{name}' (inconnue ou erreur DB)", severity=Severity.ERROR)
+            success = self.wm.delete_property(name)  # Stage deletion in WM
+            if not success:
+                return Event("delete_property_failed", "property_service", entity=name, severity=Severity.ERROR, payload="Propriété inconnue ou erreur")
 
-            return Event("property_deleted", "property_service", entity=name)
-        
+            return Event("property_deletion_proposed", "property_service", entity=name)
         # modify_property
         elif cmd.command_type == "modify_property":
             name = cmd.parameters.get("name")
-            new_name = cmd.parameters.get("new_name")  # Nouveau param pour rename
-            new_type = cmd.parameters.get("new_type")  # Optionnel
+            new_name = cmd.parameters.get("new_name")
+            new_type = cmd.parameters.get("new_type")
 
             if not name or not isinstance(name, str):
                 return Event("error", "property_service", payload="Nom de propriété invalide ou manquant", severity=Severity.ERROR)
+            success = self.wm.modify_property(name, new_name, new_type)  # Stage modification in WM
 
-            if not self.kb.modify_property(name, new_name, new_type):
-                return Event("error", "property_service", payload=f"Impossible de modifier la propriété '{name}' (inconnue ou erreur)", severity=Severity.ERROR)
-
-            return Event("property_modified", "property_service", entity=name)  # Ou new_name si rename
-
-        else :            
-            # À ajouter plus tard pour modify/delete
+            if not success:
+                return Event("modify_property_failed", "property_service", entity=name, severity=Severity.ERROR, payload="Modification impossible")
+            return Event("property_modification_proposed", "property_service", entity=name)
+        else:
             return Event("error", "property_service", payload="Commande non supportée", severity=Severity.ERROR)
